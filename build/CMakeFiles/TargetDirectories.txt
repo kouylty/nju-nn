@@ -1,0 +1,3 @@
+/mnt/e/NJU/神经网络（申富饶）/hw2/build/CMakeFiles/ndarray_backend_cpu.dir
+/mnt/e/NJU/神经网络（申富饶）/hw2/build/CMakeFiles/edit_cache.dir
+/mnt/e/NJU/神经网络（申富饶）/hw2/build/CMakeFiles/rebuild_cache.dir
