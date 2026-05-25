@@ -26,7 +26,25 @@ class SGD(Optimizer):
     def step(self):
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        for param in self.params:
+            if param.grad is None:
+                continue
+
+            grad = param.grad.detach()
+            if self.weight_decay != 0:
+                grad = grad + self.weight_decay * param.data
+
+            if self.momentum != 0:
+                if param not in self.u:
+                    self.u[param] = grad
+                else:
+                    self.u[param] = self.momentum * self.u[param] + grad
+                self.u[param] = self.u[param].detach()
+                update = self.u[param]
+            else:
+                update = grad
+
+            param.data = (param.data - self.lr * update).detach()
         ### END YOUR SOLUTION
 
     def clip_grad_norm(self, max_norm=0.25):
@@ -35,7 +53,20 @@ class SGD(Optimizer):
         """
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        total_norm_sq = 0.0
+        for param in self.params:
+            if param.grad is None:
+                continue
+            grad = param.grad.detach()
+            total_norm_sq += float((grad * grad).sum().numpy())
+
+        total_norm = np.sqrt(total_norm_sq)
+        if total_norm > max_norm:
+            scale = max_norm / (total_norm + 1e-6)
+            for param in self.params:
+                if param.grad is not None:
+                    param.grad = (param.grad.detach() * scale).detach()
+        return total_norm
         ### END YOUR SOLUTION
 
 
@@ -63,5 +94,26 @@ class Adam(Optimizer):
     def step(self):
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        self.t += 1
+        for param in self.params:
+            if param.grad is None:
+                continue
+
+            grad = param.grad.detach()
+            if self.weight_decay != 0:
+                grad = grad + self.weight_decay * param.data
+
+            if param not in self.u:
+                self.u[param] = ndl.init.zeros_like(param)
+                self.v[param] = ndl.init.zeros_like(param)
+
+            self.u[param] = self.beta1 * self.u[param] + (1 - self.beta1) * grad
+            self.v[param] = self.beta2 * self.v[param] + (1 - self.beta2) * (grad * grad)
+            self.u[param] = self.u[param].detach()
+            self.v[param] = self.v[param].detach()
+
+            u_hat = self.u[param] / (1 - self.beta1 ** self.t)
+            v_hat = self.v[param] / (1 - self.beta2 ** self.t)
+            update = (u_hat / ((v_hat ** 0.5) + self.eps)).detach()
+            param.data = (param.data - self.lr * update).detach()
         ### END YOUR SOLUTION
