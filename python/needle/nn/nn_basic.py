@@ -6,6 +6,30 @@ from needle import ops
 from functools import reduce
 import needle.init as init
 import numpy as np
+from needle.backend_selection import default_device
+
+
+def _prod(shape):
+    return reduce(lambda a, b: a * b, shape, 1)
+
+
+def _sum_keepdims(x: Tensor, axes):
+    if isinstance(axes, int):
+        axes = (axes,)
+    axes = tuple(axis if axis >= 0 else axis + len(x.shape) for axis in axes)
+    out = x.sum(axes=axes)
+    shape = list(x.shape)
+    for axis in axes:
+        shape[axis] = 1
+    return out.reshape(tuple(shape))
+
+
+def _mean_keepdims(x: Tensor, axes):
+    if isinstance(axes, int):
+        axes = (axes,)
+    axes = tuple(axis if axis >= 0 else axis + len(x.shape) for axis in axes)
+    denom = _prod([x.shape[axis] for axis in axes])
+    return _sum_keepdims(x, axes) / denom
 
 
 class Parameter(Tensor):
@@ -112,7 +136,7 @@ class Linear(Module):
         ### BEGIN YOUR SOLUTION
         y = X @ self.weight # (n, out_features)
 
-        if self.bias:
+        if self.bias is not None:
           y += ops.broadcast_to(self.bias, (*X.shape[:-1], self.out_features))
         
         return y
@@ -136,6 +160,12 @@ class ReLU(Module):
         ### END YOUR SOLUTION
 
 
+class Sigmoid(Module):
+    def forward(self, x: Tensor) -> Tensor:
+        exp_neg = ops.exp(-x)
+        return (exp_neg + 1) ** -1
+
+
 class Sequential(Module):
     def __init__(self, *modules: List["Module"]):
         super().__init__()
@@ -144,36 +174,57 @@ class Sequential(Module):
     def forward(self, x: Tensor) -> Tensor:
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        for module in self.modules:
+            x = module(x)
+        return x
         ### END YOUR SOLUTION
+
+
+class Softmax(Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return ops.exp(ops.logsoftmax(x))
 
 
 class SoftmaxLoss(Module):
     def forward(self, logits: Tensor, y: Tensor):
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        batch_size, num_classes = logits.shape
+        y_one_hot = init.one_hot(
+            num_classes,
+            y,
+            device=logits.device,
+            dtype=logits.dtype,
+        )
+        loss = ops.logsumexp(logits, axes=1) - (logits * y_one_hot).sum(axes=1)
+        return loss.sum() / batch_size
         ### END YOUR SOLUTION
         
 class CrossEntrophyLoss(Module):
     def forward(self,logits: Tensor, y: Tensor):
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        batch_size = logits.shape[0]
+        log_probs = ops.logsoftmax(logits)
+        return -(y * log_probs).sum() / batch_size
         ### END YOUR SOLUTION
         
 class BinaryCrossEntrophyLoss(Module):
     def forward(self,logits: Tensor, y: Tensor):
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        eps = 1e-7
+        probs = logits
+        loss = -(y * ops.log(probs + eps) + (-y + 1) * ops.log(-probs + 1 + eps))
+        return loss.sum() / _prod(loss.shape)
         ### END YOUR SOLUTION
         
 class MSELoss(Module):
     def forward(self, input: Tensor, target: Tensor):
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        loss = (input - target) ** 2
+        return loss.sum() / _prod(loss.shape)
         ### END YOUR SOLUTION
         
 class BatchNorm1d(Module):
@@ -184,13 +235,42 @@ class BatchNorm1d(Module):
         self.momentum = momentum
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        device = default_device() if device is None else device
+        self.weight = Parameter(init.ones(dim, device=device, dtype=dtype))
+        self.bias = Parameter(init.zeros(dim, device=device, dtype=dtype))
+        self.running_mean = init.zeros(dim, device=device, dtype=dtype)
+        self.running_var = init.ones(dim, device=device, dtype=dtype)
         ### END YOUR SOLUTION
 
     def forward(self, x: Tensor) -> Tensor:
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        assert len(x.shape) == 2 and x.shape[1] == self.dim
+        batch_size = x.shape[0]
+        stat_shape = (1, self.dim)
+
+        if self.training:
+            mean = x.sum(axes=0) / batch_size
+            mean_b = mean.reshape(stat_shape).broadcast_to(x.shape)
+            var = ((x - mean_b) ** 2).sum(axes=0) / batch_size
+
+            self.running_mean.data = (
+                self.running_mean.data * (1 - self.momentum)
+                + mean.detach() * self.momentum
+            )
+            self.running_var.data = (
+                self.running_var.data * (1 - self.momentum)
+                + var.detach() * self.momentum
+            )
+        else:
+            mean = self.running_mean
+            var = self.running_var
+            mean_b = mean.reshape(stat_shape).broadcast_to(x.shape)
+
+        var_b = var.reshape(stat_shape).broadcast_to(x.shape)
+        weight_b = self.weight.reshape(stat_shape).broadcast_to(x.shape)
+        bias_b = self.bias.reshape(stat_shape).broadcast_to(x.shape)
+        return ((x - mean_b) / ((var_b + self.eps) ** 0.5)) * weight_b + bias_b
         ### END YOUR SOLUTION
 
 
@@ -213,13 +293,25 @@ class LayerNorm1d(Module):
         self.eps = eps
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        device = default_device() if device is None else device
+        self.weight = Parameter(init.ones(dim, device=device, dtype=dtype))
+        self.bias = Parameter(init.zeros(dim, device=device, dtype=dtype))
         ### END YOUR SOLUTION
 
     def forward(self, x: Tensor) -> Tensor:
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        assert x.shape[-1] == self.dim
+        axes = (len(x.shape) - 1,)
+        mean = _mean_keepdims(x, axes)
+        mean_b = mean.broadcast_to(x.shape)
+        var = _mean_keepdims((x - mean_b) ** 2, axes)
+        var_b = var.broadcast_to(x.shape)
+        norm = (x - mean_b) / ((var_b + self.eps) ** 0.5)
+        affine_shape = (1,) * (len(x.shape) - 1) + (self.dim,)
+        weight = self.weight.reshape(affine_shape).broadcast_to(x.shape)
+        bias = self.bias.reshape(affine_shape).broadcast_to(x.shape)
+        return norm * weight + bias
         ### END YOUR SOLUTION
 
 
@@ -231,7 +323,17 @@ class Dropout(Module):
     def forward(self, x: Tensor) -> Tensor:
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        if not self.training or self.p == 0:
+            return x
+        if self.p >= 1:
+            return init.zeros_like(x)
+        mask = init.randb(
+            *x.shape,
+            p=1 - self.p,
+            device=x.device,
+            dtype=x.dtype,
+        )
+        return x * mask / (1 - self.p)
         ### END YOUR SOLUTION
 
 
@@ -243,5 +345,13 @@ class Residual(Module):
     def forward(self, x: Tensor) -> Tensor:
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return self.fn(x) + x
         ### END YOUR SOLUTION
+
+
+class CrossEntropyLoss(CrossEntrophyLoss):
+    pass
+
+
+class BinaryCrossEntropyLoss(BinaryCrossEntrophyLoss):
+    pass
