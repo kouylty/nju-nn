@@ -28,7 +28,26 @@ def parse_mnist(image_filesname, label_filename):
     """
     # TODO
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    with gzip.open(image_filesname, "rb") as image_file:
+        magic, num_images, rows, cols = struct.unpack(">IIII", image_file.read(16))
+        if magic != 2051:
+            raise ValueError(f"invalid MNIST image file magic number: {magic}")
+        image_data = image_file.read(rows * cols * num_images)
+        X = np.frombuffer(image_data, dtype=np.uint8).reshape(num_images, rows * cols)
+
+    with gzip.open(label_filename, "rb") as label_file:
+        magic, num_labels = struct.unpack(">II", label_file.read(8))
+        if magic != 2049:
+            raise ValueError(f"invalid MNIST label file magic number: {magic}")
+        label_data = label_file.read(num_labels)
+        y = np.frombuffer(label_data, dtype=np.uint8)
+
+    if num_images != num_labels:
+        raise ValueError(
+            f"image/label count mismatch: {num_images} images, {num_labels} labels"
+        )
+
+    return X.astype(np.float32) / 255.0, y.astype(np.int8)
     ### END YOUR SOLUTION
 
 
@@ -41,22 +60,39 @@ class MNISTDataset(Dataset):
     ):
         # TODO
         ### BEGIN YOUR SOLUTION
+        super().__init__(transforms)
         result = parse_mnist(image_filename, label_filename)
         self.images = result[0]
         self.labels = result[1]
-        self.transforms = transforms
         ### END YOUR SOLUTION
 
     def __getitem__(self, index) -> object:
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        images = self.images[index]
+        labels = self.labels[index]
+
+        if self.transforms is not None and np.isscalar(index):
+            image = images.reshape(28, 28, 1)
+            image = self.apply_transforms(image)
+            images = image.reshape(28 * 28)
+        elif self.transforms is not None:
+            images = np.stack(
+                [
+                    self.apply_transforms(image.reshape(28, 28, 1)).reshape(28 * 28)
+                    for image in images
+                ]
+            )
+
+        return images, labels
         ### END YOUR SOLUTION
 
     def __len__(self) -> int:
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return self.images.shape[0]
         ### END YOUR SOLUTION
 
 
+class FashionMNISTDataset(MNISTDataset):
+    pass
