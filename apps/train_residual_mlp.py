@@ -132,6 +132,31 @@ def build_optimizer(name, params, lr, weight_decay):
     raise ValueError(f"unknown optimizer: {name}")
 
 
+def build_scheduler(args, optimizer):
+    if args.scheduler == "none":
+        return None
+    if args.scheduler == "step":
+        return ndl.optim.StepDecay(
+            optimizer,
+            step_size=args.step_size,
+            gamma=args.gamma,
+        )
+    if args.scheduler == "warmup":
+        return ndl.optim.LinearWarmUp(
+            optimizer,
+            warmup_steps=args.warmup_steps,
+            start_lr=args.warmup_start_lr,
+        )
+    if args.scheduler == "cosine":
+        return ndl.optim.CosineDecayWithWarmRestarts(
+            optimizer,
+            first_cycle_steps=args.cosine_first_cycle_steps,
+            min_lr=args.cosine_min_lr,
+            cycle_mult=args.cosine_cycle_mult,
+        )
+    raise ValueError(f"unknown scheduler: {args.scheduler}")
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Train ResidualMLP on local processed datasets.")
     parser.add_argument("--dataset", choices=tuple(DATASET_INFO.keys()), default="iris")
@@ -143,6 +168,14 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--clip-grad", type=float, default=None)
+    parser.add_argument("--scheduler", choices=("none", "step", "warmup", "cosine"), default="none")
+    parser.add_argument("--step-size", type=int, default=10)
+    parser.add_argument("--gamma", type=float, default=0.5)
+    parser.add_argument("--warmup-steps", type=int, default=5)
+    parser.add_argument("--warmup-start-lr", type=float, default=0.0)
+    parser.add_argument("--cosine-first-cycle-steps", type=int, default=10)
+    parser.add_argument("--cosine-min-lr", type=float, default=0.0)
+    parser.add_argument("--cosine-cycle-mult", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--save-path", default="checkpoints/residual_mlp.npz")
     parser.add_argument("--load-path", default=None)
@@ -169,6 +202,7 @@ def main():
         print(f"loaded checkpoint: {args.load_path}")
 
     optimizer = build_optimizer(args.optimizer, model.parameters(), args.lr, args.weight_decay)
+    scheduler = build_scheduler(args, optimizer)
 
     if args.eval_only:
         test_loss, test_acc = run_epoch(
@@ -178,6 +212,7 @@ def main():
         return
 
     for epoch in range(1, args.epochs + 1):
+        lr = scheduler.step() if scheduler is not None else optimizer.lr
         train_loss, train_acc = run_epoch(
             model,
             loss_fn,
@@ -192,7 +227,8 @@ def main():
         print(
             f"epoch={epoch:03d} "
             f"train_loss={train_loss:.6f} train_acc={train_acc:.4f} "
-            f"test_loss={test_loss:.6f} test_acc={test_acc:.4f}"
+            f"test_loss={test_loss:.6f} test_acc={test_acc:.4f} "
+            f"lr={lr:.6g}"
         )
 
     save_model(model, args.save_path)
