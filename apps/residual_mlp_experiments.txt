@@ -1,0 +1,63 @@
+ResidualMLP system experiment commands
+Run all commands from the project root: /mnt/e/nju/神经网络（申富饶）/hw2
+
+Fixed model structure:
+  --hidden-dim 128
+  --num-blocks 2
+
+Common settings:
+  --epochs 10
+  --batch-size 256
+  --seed 42
+
+Each run writes results to:
+  checkpoints/ResidualMLP__<dataset>__<optimizer>__<scheduler>__<model>/
+
+Each experiment directory contains:
+  config.json
+  metrics.csv
+  summary.json
+  curves.png
+  model.npz
+
+Scheduler settings used here:
+  none: no extra scheduler argument
+  step: --scheduler step --step-size 5 --gamma 0.5
+  warmup: --scheduler warmup --warmup-steps 3 --warmup-start-lr 0.0
+  cosine: --scheduler cosine --cosine-first-cycle-steps 5 --cosine-min-lr 0.0001
+
+Iris + SGD
+python -B apps/train_residual_mlp.py --dataset iris --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer sgd --lr 0.01 --scheduler none --seed 42
+python -B apps/train_residual_mlp.py --dataset iris --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer sgd --lr 0.01 --scheduler step --step-size 5 --gamma 0.5 --seed 42
+python -B apps/train_residual_mlp.py --dataset iris --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer sgd --lr 0.01 --scheduler warmup --warmup-steps 3 --warmup-start-lr 0.0 --seed 42
+python -B apps/train_residual_mlp.py --dataset iris --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer sgd --lr 0.01 --scheduler cosine --cosine-first-cycle-steps 5 --cosine-min-lr 0.0001 --seed 42
+
+Iris + Adam
+python -B apps/train_residual_mlp.py --dataset iris --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer adam --lr 0.001 --scheduler none --seed 42
+python -B apps/train_residual_mlp.py --dataset iris --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer adam --lr 0.001 --scheduler step --step-size 5 --gamma 0.5 --seed 42
+python -B apps/train_residual_mlp.py --dataset iris --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer adam --lr 0.001 --scheduler warmup --warmup-steps 3 --warmup-start-lr 0.0 --seed 42
+python -B apps/train_residual_mlp.py --dataset iris --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer adam --lr 0.001 --scheduler cosine --cosine-first-cycle-steps 5 --cosine-min-lr 0.0001 --seed 42
+
+MNIST + SGD
+python -B apps/train_residual_mlp.py --dataset mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer sgd --lr 0.01 --scheduler none --seed 42
+python -B apps/train_residual_mlp.py --dataset mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer sgd --lr 0.01 --scheduler step --step-size 5 --gamma 0.5 --seed 42
+python -B apps/train_residual_mlp.py --dataset mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer sgd --lr 0.01 --scheduler warmup --warmup-steps 3 --warmup-start-lr 0.0 --seed 42
+python -B apps/train_residual_mlp.py --dataset mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer sgd --lr 0.01 --scheduler cosine --cosine-first-cycle-steps 5 --cosine-min-lr 0.0001 --seed 42
+
+MNIST + Adam
+python -B apps/train_residual_mlp.py --dataset mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer adam --lr 0.001 --scheduler none --seed 42
+python -B apps/train_residual_mlp.py --dataset mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer adam --lr 0.001 --scheduler step --step-size 5 --gamma 0.5 --seed 42
+python -B apps/train_residual_mlp.py --dataset mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer adam --lr 0.001 --scheduler warmup --warmup-steps 3 --warmup-start-lr 0.0 --seed 42
+python -B apps/train_residual_mlp.py --dataset mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer adam --lr 0.001 --scheduler cosine --cosine-first-cycle-steps 5 --cosine-min-lr 0.0001 --seed 42
+
+Fashion-MNIST + SGD
+python -B apps/train_residual_mlp.py --dataset fashion-mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer sgd --lr 0.01 --scheduler none --seed 42
+python -B apps/train_residual_mlp.py --dataset fashion-mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer sgd --lr 0.01 --scheduler step --step-size 5 --gamma 0.5 --seed 42
+python -B apps/train_residual_mlp.py --dataset fashion-mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer sgd --lr 0.01 --scheduler warmup --warmup-steps 3 --warmup-start-lr 0.0 --seed 42
+python -B apps/train_residual_mlp.py --dataset fashion-mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer sgd --lr 0.01 --scheduler cosine --cosine-first-cycle-steps 5 --cosine-min-lr 0.0001 --seed 42
+
+Fashion-MNIST + Adam
+python -B apps/train_residual_mlp.py --dataset fashion-mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer adam --lr 0.001 --scheduler none --seed 42
+python -B apps/train_residual_mlp.py --dataset fashion-mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer adam --lr 0.001 --scheduler step --step-size 5 --gamma 0.5 --seed 42
+python -B apps/train_residual_mlp.py --dataset fashion-mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer adam --lr 0.001 --scheduler warmup --warmup-steps 3 --warmup-start-lr 0.0 --seed 42
+python -B apps/train_residual_mlp.py --dataset fashion-mnist --epochs 10 --batch-size 256 --hidden-dim 128 --num-blocks 2 --optimizer adam --lr 0.001 --scheduler cosine --cosine-first-cycle-steps 5 --cosine-min-lr 0.0001 --seed 42

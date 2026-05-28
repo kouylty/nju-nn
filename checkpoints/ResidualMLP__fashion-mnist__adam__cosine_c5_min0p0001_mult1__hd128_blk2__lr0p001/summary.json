@@ -1,0 +1,43 @@
+{
+  "config": {
+    "dataset": "fashion-mnist",
+    "epochs": 10,
+    "batch_size": 256,
+    "hidden_dim": 128,
+    "num_blocks": 2,
+    "optimizer": "adam",
+    "lr": 0.001,
+    "weight_decay": 0.0,
+    "clip_grad": null,
+    "scheduler": "cosine",
+    "step_size": 10,
+    "gamma": 0.5,
+    "warmup_steps": 5,
+    "warmup_start_lr": 0.0,
+    "cosine_first_cycle_steps": 5,
+    "cosine_min_lr": 0.0001,
+    "cosine_cycle_mult": 1.0,
+    "seed": 42,
+    "output_root": "checkpoints",
+    "experiment_name": "ResidualMLP__fashion-mnist__adam__cosine_c5_min0p0001_mult1__hd128_blk2__lr0p001",
+    "save_path": null,
+    "load_path": null,
+    "eval_only": false,
+    "no_save": false,
+    "no_progress": false,
+    "output_dir": "checkpoints/ResidualMLP__fashion-mnist__adam__cosine_c5_min0p0001_mult1__hd128_blk2__lr0p001",
+    "resolved_save_path": "checkpoints/ResidualMLP__fashion-mnist__adam__cosine_c5_min0p0001_mult1__hd128_blk2__lr0p001/model.npz"
+  },
+  "epochs_completed": 10,
+  "final": {
+    "epoch": 10,
+    "lr": 0.00018594235253127368,
+    "train_loss": 0.21104183543125787,
+    "train_acc": 0.92065,
+    "test_loss": 0.32922869737148286,
+    "test_acc": 0.8787
+  },
+  "best_test_acc": 0.8847,
+  "best_test_acc_epoch": 9,
+  "best_test_loss_at_best_acc": 0.3170923495769501
+}

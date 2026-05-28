@@ -1,0 +1,43 @@
+{
+  "config": {
+    "dataset": "mnist",
+    "epochs": 10,
+    "batch_size": 256,
+    "hidden_dim": 128,
+    "num_blocks": 2,
+    "optimizer": "sgd",
+    "lr": 0.01,
+    "weight_decay": 0.0,
+    "clip_grad": null,
+    "scheduler": "step",
+    "step_size": 5,
+    "gamma": 0.5,
+    "warmup_steps": 5,
+    "warmup_start_lr": 0.0,
+    "cosine_first_cycle_steps": 10,
+    "cosine_min_lr": 0.0,
+    "cosine_cycle_mult": 1.0,
+    "seed": 42,
+    "output_root": "checkpoints",
+    "experiment_name": "ResidualMLP__mnist__sgd__step_s5_g0p5__hd128_blk2__lr0p01",
+    "save_path": null,
+    "load_path": null,
+    "eval_only": false,
+    "no_save": false,
+    "no_progress": false,
+    "output_dir": "checkpoints/ResidualMLP__mnist__sgd__step_s5_g0p5__hd128_blk2__lr0p01",
+    "resolved_save_path": "checkpoints/ResidualMLP__mnist__sgd__step_s5_g0p5__hd128_blk2__lr0p01/model.npz"
+  },
+  "epochs_completed": 10,
+  "final": {
+    "epoch": 10,
+    "lr": 0.005,
+    "train_loss": 0.042128800870974856,
+    "train_acc": 0.9879833333333333,
+    "test_loss": 0.08491714148521423,
+    "test_acc": 0.9741
+  },
+  "best_test_acc": 0.9741,
+  "best_test_acc_epoch": 10,
+  "best_test_loss_at_best_acc": 0.08491714148521423
+}
