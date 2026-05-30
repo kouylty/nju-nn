@@ -9,7 +9,6 @@ from needle import ops
 import needle.init as init
 import numpy as np
 
-from .nn_sequence import Embedding
 from .nn_basic import (
     Parameter, 
     Module, 
@@ -19,6 +18,43 @@ from .nn_basic import (
     Linear,
     Sequential
 )
+from needle.backend_selection import default_device
+
+
+def _prod(shape):
+    out = 1
+    for dim in shape:
+        out *= dim
+    return out
+
+
+class Embedding(Module):
+    def __init__(self, num_embeddings, embedding_dim, device=None, dtype="float32"):
+        super().__init__()
+        device = default_device() if device is None else device
+        self.num_embeddings = num_embeddings
+        self.embedding_dim = embedding_dim
+        self.weight = Parameter(
+            init.randn(
+                num_embeddings,
+                embedding_dim,
+                mean=0.0,
+                std=1.0,
+                device=device,
+                dtype=dtype,
+            )
+        )
+
+    def forward(self, x):
+        flat = x.reshape((_prod(x.shape),))
+        one_hot = init.one_hot(
+            self.num_embeddings,
+            flat,
+            device=self.weight.device,
+            dtype=self.weight.dtype,
+        )
+        out = one_hot @ self.weight
+        return out.reshape((*x.shape, self.embedding_dim))
 
 
 class MultiHeadAttention(Module):
@@ -114,7 +150,18 @@ class MultiHeadAttention(Module):
         probs = None
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        logits = self.matmul(q, k) / math.sqrt(q_dim)
+        if self.causal:
+            mask = Tensor(
+                self.create_causal_mask(q_len, k_len, q.device),
+                device=q.device,
+                dtype=q.dtype,
+                requires_grad=False,
+            )
+            logits = logits + mask.broadcast_to(logits.shape)
+        probs = self.softmax(logits)
+        probs = self.dropout(probs)
+        result = self.matmul(probs, v.transpose((2, 3)))
         ### END YOUR SOLUTION
 
         return result, probs
@@ -208,7 +255,25 @@ class AttentionLayer(Module):
         result = None
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        q = self.prenorm_q(q)
+        k = self.prenorm_k(k)
+        v = self.prenorm_v(v)
+
+        q = self.q_projection(q).reshape(
+            (batch_size, q_len, self.num_head, self.dim_head)
+        ).transpose((1, 2))
+        k = self.k_projection(k).reshape(
+            (batch_size, k_len, self.num_head, self.dim_head)
+        ).transpose((1, 2))
+        v = self.v_projection(v).reshape(
+            (batch_size, k_len, self.num_head, self.dim_head)
+        ).transpose((1, 2))
+
+        result, _ = self.attn(q, k, v)
+        result = result.transpose((1, 2)).reshape(
+            (batch_size, q_len, self.num_head * self.dim_head)
+        )
+        result = self.out_projection(result)
         ### END YOUR SOLUTION
 
         return result
@@ -236,7 +301,24 @@ class TransformerLayer(Module):
         self.q_features = q_features
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        self.attn = AttentionLayer(
+            q_features,
+            num_head,
+            dim_head,
+            dropout=dropout,
+            causal=causal,
+            device=device,
+            dtype=dtype,
+        )
+        self.attn_dropout = Dropout(dropout)
+        self.ffn_norm = LayerNorm1d(q_features, device=device, dtype=dtype)
+        self.ffn = Sequential(
+            Linear(q_features, hidden_size, device=device, dtype=dtype),
+            ReLU(),
+            Dropout(dropout),
+            Linear(hidden_size, q_features, device=device, dtype=dtype),
+            Dropout(dropout),
+        )
         ### END YOUR SOLUTION
 
     def forward(
@@ -252,7 +334,8 @@ class TransformerLayer(Module):
         batch_size, seq_len, x_dim = x.shape
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        x = x + self.attn_dropout(self.attn(x))
+        x = x + self.ffn(self.ffn_norm(x))
         ### END YOUR SOLUTION
 
         return x
@@ -284,7 +367,28 @@ class Transformer(Module):
         self.sequence_len = sequence_len
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        self.embedding_size = embedding_size
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.position_embedding = Embedding(
+            sequence_len,
+            embedding_size,
+            device=device,
+            dtype=dtype,
+        )
+        self.layers = [
+            TransformerLayer(
+                embedding_size,
+                num_head,
+                dim_head,
+                hidden_size,
+                dropout=dropout,
+                causal=causal,
+                device=device,
+                dtype=dtype,
+            )
+            for _ in range(num_layers)
+        ]
         ### END YOUR SOLUTION
 
     def create_timestamp_tensor(self, batch_size: int, seq_len: int):
@@ -299,7 +403,16 @@ class Transformer(Module):
         batch_size, seq_len, input_dim = x.shape
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        assert seq_len <= self.sequence_len
+        assert input_dim == self.embedding_size
+
+        pos = self.create_timestamp_tensor(batch_size, seq_len)
+        pos = self.position_embedding(pos)
+        pos = ops.transpose(pos, axes=(0, 1))
+        x = x + pos
+
+        for layer in self.layers:
+            x = layer(x)
         ### END YOUR SOLUTION
 
         if not self.batch_first:
