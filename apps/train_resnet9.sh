@@ -6,11 +6,12 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
 EPOCHS=10
-BATCH_SIZE=128
+BATCH_SIZE=64
 OPTIMIZER="adam"
 LR=0.001
 WEIGHT_DECAY=0.0
 SEED=42
+DEVICE="${DEVICE:-cpu_numpy}"
 
 SCHEDULERS=("none" "step" "warmup" "cosine")
 
@@ -28,7 +29,7 @@ run_experiment() {
       scheduler_args+=("--warmup-steps" "3" "--warmup-start-lr" "0.0")
       ;;
     cosine)
-      scheduler_args+=("--cosine-first-cycle-steps" "5" "--cosine-min-lr" "0.0001")
+      scheduler_args+=("--cosine-first-cycle-steps" "10" "--cosine-min-lr" "0.0001")
       ;;
     *)
       echo "unknown scheduler: ${scheduler}" >&2
@@ -38,7 +39,7 @@ run_experiment() {
 
   echo "============================================================"
   echo "ResNet9 experiment"
-  echo "dataset=cifar10 optimizer=${OPTIMIZER} scheduler=${scheduler} augment=true lr=${LR} weight_decay=${WEIGHT_DECAY} epochs=${EPOCHS} batch_size=${BATCH_SIZE} seed=${SEED}"
+  echo "dataset=cifar10 optimizer=${OPTIMIZER} scheduler=${scheduler} augment=true lr=${LR} weight_decay=${WEIGHT_DECAY} epochs=${EPOCHS} batch_size=${BATCH_SIZE} seed=${SEED} device=${DEVICE}"
   echo "============================================================"
 
   python -B apps/train_resnet9.py \
@@ -47,6 +48,7 @@ run_experiment() {
     --optimizer "${OPTIMIZER}" \
     --lr "${LR}" \
     --weight-decay "${WEIGHT_DECAY}" \
+    --device "${DEVICE}" \
     --augment \
     "${scheduler_args[@]}" \
     --seed "${SEED}"

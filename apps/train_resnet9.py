@@ -85,12 +85,51 @@ def prepare_experiment_dir(args):
     return output_dir
 
 
-def serializable_config(args, output_dir, save_path, best_save_path):
+def resolve_device(device_name):
+    if device_name == "cpu_numpy":
+        return ndl.cpu_numpy()
+    if device_name == "cpu":
+        return ndl.cpu()
+    if device_name == "cuda":
+        device = ndl.cuda()
+        if not device.enabled():
+            raise RuntimeError("Needle CUDA backend is not available")
+        _probe_device(device)
+        return device
+    if device_name == "auto":
+        cuda_device = ndl.cuda()
+        if cuda_device.enabled():
+            try:
+                _probe_device(cuda_device)
+                print("using device: cuda")
+                return cuda_device
+            except Exception as err:
+                print(f"cuda probe failed, falling back to cpu_numpy: {err}")
+        print("using device: cpu_numpy")
+        return ndl.cpu_numpy()
+    raise ValueError(f"unknown device: {device_name}")
+
+
+def _probe_device(device):
+    x = ndl.Tensor(np.zeros((1,), dtype=np.float32), device=device, requires_grad=False)
+    _ = (x + 1).numpy()
+
+
+def move_batch_to_device(batch, device):
+    x_tensor, y_tensor = batch
+    return (
+        ndl.Tensor(x_tensor, device=device, requires_grad=False),
+        ndl.Tensor(y_tensor, device=device, requires_grad=False),
+    )
+
+
+def serializable_config(args, output_dir, save_path, best_save_path, device):
     config = vars(args).copy()
     config["cifar_dir"] = str(Path(args.cifar_dir).resolve())
     config["output_dir"] = str(output_dir)
     config["resolved_save_path"] = str(save_path)
     config["resolved_best_save_path"] = str(best_save_path)
+    config["resolved_device"] = str(device)
     config["experiment_name"] = output_dir.name
     return config
 
@@ -264,6 +303,7 @@ def run_epoch(
     clip_grad=None,
     epoch=None,
     progress=True,
+    device=None,
 ):
     if train:
         model.train()
@@ -280,22 +320,35 @@ def run_epoch(
     desc = stage if epoch is None else f"{stage} epoch {epoch:03d}"
     iterator = progress_bar(iterator, total_batches, desc, progress)
 
-    for x_tensor, y_tensor in iterator:
-        logits = model(x_tensor)
-        loss = loss_fn(logits, y_tensor)
-        labels = y_tensor.numpy().astype("int32")
-        batch_size_actual = labels.shape[0]
+    for batch in iterator:
+        if device is not None:
+            x_tensor, y_tensor = move_batch_to_device(batch, device)
+        else:
+            x_tensor, y_tensor = batch
 
-        total_loss += float(loss.numpy()) * batch_size_actual
-        total_correct += int((logits.numpy().argmax(axis=1) == labels).sum())
-        total_count += batch_size_actual
+        logits = model(x_tensor)
 
         if train:
+            loss = loss_fn(logits, y_tensor)
+            batch_size_actual = y_tensor.shape[0]
+            loss_value = float(loss.numpy())
+            if not np.isfinite(loss_value):
+                raise FloatingPointError(
+                    f"non-finite train loss at epoch={epoch}: {loss_value}"
+                )
+            total_loss += loss_value * batch_size_actual
+            total_count += batch_size_actual
+
             loss.backward()
             if clip_grad is not None and hasattr(optimizer, "clip_grad_norm"):
                 optimizer.clip_grad_norm(clip_grad)
             optimizer.step()
             optimizer.reset_grad()
+        else:
+            labels = y_tensor.numpy().astype("int32")
+            batch_size_actual = labels.shape[0]
+            total_correct += int((logits.numpy().argmax(axis=1) == labels).sum())
+            total_count += batch_size_actual
 
         if hasattr(iterator, "set_postfix"):
             if train:
@@ -303,7 +356,9 @@ def run_epoch(
             else:
                 iterator.set_postfix(acc=f"{total_correct / total_count:.4f}")
 
-    return total_loss / total_count, total_correct / total_count
+    avg_loss = total_loss / total_count if train else None
+    avg_acc = total_correct / total_count if not train else None
+    return avg_loss, avg_acc
 
 
 def parse_args():
@@ -328,6 +383,7 @@ def parse_args():
     parser.add_argument("--flip-prob", type=float, default=0.5)
     parser.add_argument("--max-train-samples", type=int, default=None)
     parser.add_argument("--max-test-samples", type=int, default=None)
+    parser.add_argument("--device", choices=("auto", "cuda", "cpu", "cpu_numpy"), default="auto")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-root", default="checkpoints")
     parser.add_argument("--experiment-name", default=None)
@@ -351,11 +407,12 @@ def main():
         if args.best_save_path is not None
         else output_dir / "best_model.npz"
     )
-    config = serializable_config(args, output_dir, save_path, best_save_path)
+    device = resolve_device(args.device)
+    config = serializable_config(args, output_dir, save_path, best_save_path, device)
     write_json(output_dir / "config.json", config)
 
     train_loader, test_loader = build_dataloaders(args)
-    model = ResNet9()
+    model = ResNet9(device=device)
     loss_fn = nn.SoftmaxLoss()
 
     if args.load_path is not None:
@@ -373,6 +430,7 @@ def main():
             test_loader,
             train=False,
             progress=not args.no_progress,
+            device=device,
         )
         print(f"eval test_acc={test_acc:.4f}")
         write_json(
@@ -394,6 +452,7 @@ def main():
             clip_grad=args.clip_grad,
             epoch=epoch,
             progress=not args.no_progress,
+            device=device,
         )
         _, test_acc = run_epoch(
             model,
@@ -403,6 +462,7 @@ def main():
             train=False,
             epoch=epoch,
             progress=not args.no_progress,
+            device=device,
         )
 
         row = {

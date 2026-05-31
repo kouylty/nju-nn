@@ -38,26 +38,26 @@ class ResNet9(nn.Module):
         # TODO
         ### BEGIN YOUR SOLUTION ###
         self.net = nn.Sequential(
-            ConvBatchNorm(3, 16, 7, 4, device=device, dtype=dtype),
-            ConvBatchNorm(16, 32, 3, 2, device=device, dtype=dtype),
+            ConvBatchNorm(3, 32, 3, 1, device=device, dtype=dtype),
+            ConvBatchNorm(32, 64, 3, 2, device=device, dtype=dtype),
             nn.Residual(
                 nn.Sequential(
-                    ConvBatchNorm(32, 32, 3, 1, device=device, dtype=dtype),
-                    ConvBatchNorm(32, 32, 3, 1, device=device, dtype=dtype),
+                    ConvBatchNorm(64, 64, 3, 1, device=device, dtype=dtype),
+                    ConvBatchNorm(64, 64, 3, 1, device=device, dtype=dtype),
                 )
             ),
-            ConvBatchNorm(32, 64, 3, 2, device=device, dtype=dtype),
             ConvBatchNorm(64, 128, 3, 2, device=device, dtype=dtype),
+            ConvBatchNorm(128, 256, 3, 2, device=device, dtype=dtype),
             nn.Residual(
                 nn.Sequential(
-                    ConvBatchNorm(128, 128, 3, 1, device=device, dtype=dtype),
-                    ConvBatchNorm(128, 128, 3, 1, device=device, dtype=dtype),
+                    ConvBatchNorm(256, 256, 3, 1, device=device, dtype=dtype),
+                    ConvBatchNorm(256, 256, 3, 1, device=device, dtype=dtype),
                 )
             ),
             nn.Flatten(),
-            nn.Linear(128, 128, device=device, dtype=dtype),
+            nn.Linear(256 * 4 * 4, 256, device=device, dtype=dtype),
             nn.ReLU(),
-            nn.Linear(128, 10, device=device, dtype=dtype),
+            nn.Linear(256, 10, device=device, dtype=dtype),
         )
         ### END YOUR SOLUTION
 
