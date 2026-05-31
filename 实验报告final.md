@@ -31,6 +31,8 @@
 
 ​	3.1 ResidualMLP 实验（`./apps/`, `./checkpoints/`）（要求：按顺序讲以下几个部分：1. ResidualMLP 的模型架构；2. train_residual_mlp 脚本的实现思路；3. 做了哪几组系统实验、每一组的配置是什么；4. 分析一下实验数据得到结果）
 
+​	3.2 ResNet9 实验（`./apps/`, `./checkpoints/`）（要求：按顺序讲以下几个部分：1. ResNet9 的模型架构；2. 数据增强的思路和实现；3. 写一句话“类似于train_residual_mlp，也实现了 train_resnet9 脚本”；4. 做了哪几组系统实验、每一组的配置是什么；5. 分析一下实验数据得到结果）
+
 
 ****
 
@@ -434,4 +436,93 @@ Scheduler：none, step, warmup, cosine
 | Fashion-MNIST | Adam + cosine | 0.8847 |
 
 通过这些实验可以看到，本次实现的框架已经能够支持从数据加载、模型定义、自动微分、参数更新到实验记录的完整神经网络训练流程。ResidualMLP 在三个数据集上的结果也符合数据集难度和模型结构特点，说明框架实现基本正确，实验结果具有合理性。
+
+#### 3.2 ResNet9 实验（`./python/apps`）
+
+**1. ResNet9 模型架构。** 在完成 ResidualMLP 实验之后，为了进一步验证框架对卷积神经网络的支持，本实验又实现并训练了 ResNet9 模型，代码位于 `apps/models.py`。ResNet9 面向 CIFAR-10 图像分类任务，输入图像形状为 `(3,32,32)`，输出为 10 个类别的 logits。与 ResidualMLP 直接展平图像不同，ResNet9 使用卷积层提取局部空间特征，更适合处理图像数据。
+
+模型中定义了一个基础模块 `ConvBatchNorm`，它由 `nn.Conv`、`nn.BatchNorm2d` 和 `nn.ReLU` 组成。卷积层负责提取局部特征，BatchNorm 用于稳定训练过程，ReLU 引入非线性。`nn.Conv` 接受 NCHW 格式输入，因此 CIFAR-10 数据集读取出的 `(3,32,32)` 图像可以直接送入模型。
+
+最终采用的 ResNet9 结构为：
+
+```text
+ConvBNReLU(3 -> 32,  kernel=3, stride=1)
+ConvBNReLU(32 -> 64, kernel=3, stride=2)
+Residual[ConvBNReLU(64 -> 64) -> ConvBNReLU(64 -> 64)]
+ConvBNReLU(64 -> 128,  kernel=3, stride=2)
+ConvBNReLU(128 -> 256, kernel=3, stride=2)
+Residual[ConvBNReLU(256 -> 256) -> ConvBNReLU(256 -> 256)]
+Flatten
+Linear(256 * 4 * 4 -> 256) -> ReLU
+Linear(256 -> 10)
+```
+
+这个结构相比最初版本做了重要调整：第一层使用 `3x3` 卷积和 `stride=1`，不会一开始就把 `32x32` 图像压缩到很小的空间尺寸；后续通过三次 `stride=2` 的卷积逐步把空间尺寸从 `32x32` 降到 `4x4`。这样既增加了通道数和模型容量，又保留了更多空间信息。两个残差块分别工作在 `64x16x16` 和 `256x4x4` 特征图上，形式为：
+
+$$
+y = F(x) + x
+$$
+
+其中 $F(x)$ 是两层 `ConvBatchNorm` 组成的子网络。残差连接可以让网络学习残差映射，减轻深层网络训练时的优化困难。
+
+**2. 数据增强的思路和实现。** CIFAR-10 的训练图像数量有限，直接使用原始训练集容易使模型记住局部样本模式。为了提升泛化能力，本实验在训练集上加入了简单的数据增强，测试集不做增强。数据增强代码通过 `apps/train_resnet9.py` 中的 `--augment` 参数启用，具体使用了 `RandomCrop` 和 `RandomFlipHorizontal` 两个变换。
+
+`RandomCrop` 的思路是先在图像四周补零，再随机裁剪回原来的 `32x32` 大小。这样可以模拟物体在图像中出现轻微平移的情况，使模型对位置变化更鲁棒。`RandomFlipHorizontal` 以给定概率对图像进行水平翻转，默认概率为 0.5，适合 CIFAR-10 中多数自然图像类别。
+
+需要注意的是，`CIFAR10Dataset` 内部保存图像时使用 NCHW 格式，即 `(3,32,32)`；而数据增强函数处理的是 HWC 格式，即 `(32,32,3)`。因此在 `CIFAR10Dataset.__getitem__` 中，代码会在增强前把图像转为 HWC，增强后再转回 NCHW。这样既能复用已有数据增强函数，又能保证送入 `nn.Conv` 的数据格式正确。
+
+**3. 训练脚本。** 类似于 `train_residual_mlp`，也实现了 `train_resnet9` 脚本。
+
+`apps/train_resnet9.py` 负责构造 CIFAR-10 的训练集和测试集、创建 ResNet9 模型、配置 Adam 优化器和 scheduler，并在每轮训练后记录训练损失和测试准确率。每组实验会在 `checkpoints/` 下建立独立子目录，保存 `config.json`、`metrics.csv`、`summary.json`、`curves.png`、`model.npz` 和 `best_model.npz`。其中 `metrics.csv` 记录每个 epoch 的 `train_loss` 和 `test_acc`，`curves.png` 用于可视化训练损失曲线和测试准确率曲线。
+
+**4. 系统实验配置。** ResNet9 实验固定数据集、模型、优化器和数据增强方式，只比较不同 scheduler 的影响。根据 `checkpoints` 中保存的配置，本次实验的共同设置为：
+
+```text
+dataset = CIFAR-10
+model = ResNet9
+optimizer = Adam
+lr = 0.001
+weight_decay = 0.0
+epochs = 10
+batch_size = 64
+augment = true
+seed = 42
+device = cpu_numpy
+```
+
+四组实验分别对应四种 scheduler：
+
+| 编号 | Scheduler | 学习率 | Scheduler 参数 | 实验目录 |
+|---:|---|---:|---|---|
+| 1 | none | 0.001 | - | `ResNet9__cifar10__adam__none__aug__lr0p001` |
+| 2 | step | 0.001 | step_size=5, gamma=0.5 | `ResNet9__cifar10__adam__step_s5_g0p5__aug__lr0p001` |
+| 3 | warmup | 0.001 | warmup_steps=3, start_lr=0.0 | `ResNet9__cifar10__adam__warmup_w3_start0__aug__lr0p001` |
+| 4 | cosine | 0.001 | first_cycle_steps=10, min_lr=0.0001, cycle_mult=1.0 | `ResNet9__cifar10__adam__cosine_c10_min0p0001_mult1__aug__lr0p001` |
+
+实验结果如下表所示。由于本实验只关注训练损失和测试准确率，因此表中列出最终 epoch 的 `train_loss`、最终 `test_acc`、最佳 `test_acc` 及其对应 epoch。
+
+| Scheduler | Final Train Loss | Final Test Acc | Best Test Acc | Best Epoch |
+|---|---:|---:|---:|---:|
+| none | 0.4337 | 0.8344 | 0.8344 | 10 |
+| step | 0.4026 | 0.8449 | 0.8449 | 10 |
+| warmup | 0.4751 | 0.8192 | 0.8192 | 10 |
+| cosine | 0.3598 | 0.8601 | 0.8601 | 10 |
+
+四组实验的训练曲线如下。
+
+![ResNet9 None Curves](checkpoints/ResNet9__cifar10__adam__none__aug__lr0p001/curves.png)
+
+![ResNet9 Step Curves](checkpoints/ResNet9__cifar10__adam__step_s5_g0p5__aug__lr0p001/curves.png)
+
+![ResNet9 Warmup Curves](checkpoints/ResNet9__cifar10__adam__warmup_w3_start0__aug__lr0p001/curves.png)
+
+![ResNet9 Cosine Curves](checkpoints/ResNet9__cifar10__adam__cosine_c10_min0p0001_mult1__aug__lr0p001/curves.png)
+
+**5. 实验结果分析。** 从整体结果看，ResNet9 在 CIFAR-10 上取得了明显优于普通展平 MLP 的图像分类效果。四组实验的最终测试准确率均超过 0.81，其中 `Adam + cosine` 效果最好，最终测试准确率和最佳测试准确率均为 0.8601；`Adam + step` 次之，最佳测试准确率为 0.8449；固定学习率 `none` 的结果为 0.8344；`warmup` 在本次短训练设置下表现最弱，最终测试准确率为 0.8192。
+
+从训练损失看，`cosine` 的最终训练损失最低，为 0.3598，同时测试准确率最高。这说明余弦退火在 10 个 epoch 内更充分地利用了学习率变化：前期保持较大学习率帮助快速下降，后期逐渐降低学习率，使参数更新更细致。`step` 在第 5 个 epoch 后降低学习率，最终训练损失为 0.4026，测试准确率比固定学习率高约 1.05 个百分点，说明分段衰减也能提升后期收敛质量。
+
+`warmup` 的第 1 轮测试准确率较高，但后续整体落后。原因可能是本实验总训练轮数只有 10 轮，warmup 前 3 轮逐步升高学习率，占用了较多有效训练时间；在较短训练周期下，Adam 本身已经具有较强的自适应能力，额外 warmup 未必有优势。如果训练轮数进一步增加，warmup 可能会更适合较大学习率或更深模型，但在本次设置中并不是最优选择。
+
+四组实验的最佳测试准确率都出现在第 10 个 epoch，说明模型在 10 轮结束时还没有明显过拟合或完全收敛。如果继续增加训练轮数，尤其是对 `cosine` 和 `step` 两组实验，测试准确率仍有继续提升的可能。综合本次实验，ResNet9 的推荐配置为 `Adam + cosine scheduler + 数据增强`，它在 CIFAR-10 上取得了 0.8601 的最佳测试准确率。
 
