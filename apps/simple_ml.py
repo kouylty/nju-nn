@@ -38,7 +38,25 @@ def parse_mnist(image_filesname, label_filename):
     """
     # TODO
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    with gzip.open(image_filesname, "rb") as f:
+        magic, num_images, rows, cols = struct.unpack(">IIII", f.read(16))
+        if magic != 2051:
+            raise ValueError(f"invalid MNIST image file magic number: {magic}")
+        image_data = f.read()
+
+    with gzip.open(label_filename, "rb") as f:
+        magic, num_labels = struct.unpack(">II", f.read(8))
+        if magic != 2049:
+            raise ValueError(f"invalid MNIST label file magic number: {magic}")
+        label_data = f.read()
+
+    if num_images != num_labels:
+        raise ValueError(f"image/label count mismatch: {num_images} vs {num_labels}")
+
+    X = np.frombuffer(image_data, dtype=np.uint8).astype(np.float32)
+    X = X.reshape(num_images, rows * cols) / 255.0
+    y = np.frombuffer(label_data, dtype=np.uint8).astype(np.int8)
+    return X, y
     ### END YOUR SOLUTION
 
 
@@ -60,7 +78,12 @@ def softmax_loss(Z, y_one_hot):
     """
     # TODO
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    batch_size = Z.shape[0]
+    logits_exp = ndl.ops.exp(Z)
+    logits_exp_sum = logits_exp.sum(axes=1)
+    log_sum_exp = ndl.ops.log(logits_exp_sum)
+    correct_logits = (Z * y_one_hot).sum(axes=1)
+    return (log_sum_exp - correct_logits).sum() / batch_size
     ### END YOUR SOLUTION
 
 
@@ -89,7 +112,28 @@ def nn_epoch(X, y, W1, W2, lr=0.1, batch=100):
     """
     # TODO
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    num_examples = X.shape[0]
+    num_classes = W2.shape[1]
+
+    for start in range(0, num_examples, batch):
+        end = min(start + batch, num_examples)
+        X_batch = ndl.Tensor(X[start:end], requires_grad=False)
+        y_batch = y[start:end]
+
+        y_one_hot = np.zeros((end - start, num_classes), dtype=np.float32)
+        y_one_hot[np.arange(end - start), y_batch] = 1.0
+        y_one_hot = ndl.Tensor(y_one_hot, requires_grad=False)
+
+        logits = ndl.ops.relu(X_batch @ W1) @ W2
+        loss = softmax_loss(logits, y_one_hot)
+        loss.backward()
+
+        W1.data = (W1.data - lr * W1.grad).detach()
+        W2.data = (W2.data - lr * W2.grad).detach()
+        W1.grad = None
+        W2.grad = None
+
+    return W1, W2
     ### END YOUR SOLUTION
 
 ### CIFAR-10 training ###
