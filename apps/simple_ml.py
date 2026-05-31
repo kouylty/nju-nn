@@ -12,7 +12,7 @@ import needle as ndl
 import needle.nn as nn
 from apps.models import *
 import time
-device = ndl.cuda()
+device = ndl.cpu()
 
 def parse_mnist(image_filesname, label_filename):
     """Read an images and labels file in MNIST format.  See this page:
@@ -110,10 +110,37 @@ def epoch_general_cifar10(dataloader, model, epoch, loss_fn=nn.SoftmaxLoss(), op
         avg_acc: average accuracy over dataset
         avg_loss: average loss over dataset
     """
-    np.random.seed(4)
     # TODO
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    if opt is None:
+        model.eval()
+    else:
+        model.train()
+
+    total_correct = 0
+    total_loss = 0.0
+    total_examples = 0
+
+    for X, y in dataloader:
+        logits = model(X)
+        loss = loss_fn(logits, y)
+
+        y_np = y.numpy().astype("int32")
+        pred_np = logits.numpy().argmax(axis=1)
+        batch_size = y_np.shape[0]
+
+        total_correct += np.sum(pred_np == y_np)
+        total_loss += loss.numpy().item() * batch_size
+        total_examples += batch_size
+
+        if opt is not None:
+            loss.backward()
+            opt.step()
+            opt.reset_grad()
+
+    avg_acc = total_correct / total_examples
+    avg_loss = total_loss / total_examples
+    return avg_acc, avg_loss
     ### END YOUR SOLUTION
 
 
@@ -135,10 +162,21 @@ def train_cifar10(model, dataloader, n_epochs=1, optimizer=ndl.optim.Adam,
         avg_acc: average accuracy over dataset from last epoch of training
         avg_loss: average loss over dataset from last epoch of training
     """
-    np.random.seed(4)
     # TODO
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    opt = optimizer(model.parameters(), lr=lr, weight_decay=weight_decay)
+    avg_acc, avg_loss = 0.0, 0.0
+
+    for epoch in range(n_epochs):
+        avg_acc, avg_loss = epoch_general_cifar10(
+            dataloader,
+            model,
+            epoch,
+            loss_fn=loss_fn,
+            opt=opt,
+        )
+
+    return avg_acc, avg_loss
     ### END YOUR SOLUTION
 
 
@@ -155,10 +193,15 @@ def evaluate_cifar10(model, dataloader, loss_fn=nn.SoftmaxLoss()):
         avg_acc: average accuracy over dataset
         avg_loss: average loss over dataset
     """
-    np.random.seed(4)
     # TODO
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    return epoch_general_cifar10(
+        dataloader,
+        model,
+        epoch=None,
+        loss_fn=loss_fn,
+        opt=None,
+    )
     ### END YOUR SOLUTION
 
 ### CODE BELOW IS FOR ILLUSTRATION, YOU DO NOT NEED TO EDIT

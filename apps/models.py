@@ -9,6 +9,7 @@ np.random.seed(0)
 
 class ConvBatchNorm(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, device=None, dtype="float32"):
+        super().__init__()
         self.conv2d = nn.Conv(
             in_channels=in_channels, 
             out_channels=out_channels, 
@@ -36,11 +37,32 @@ class ResNet9(nn.Module):
         super().__init__()
         # TODO
         ### BEGIN YOUR SOLUTION ###
-        raise NotImplementedError()
+        self.net = nn.Sequential(
+            ConvBatchNorm(3, 16, 7, 4, device=device, dtype=dtype),
+            ConvBatchNorm(16, 32, 3, 2, device=device, dtype=dtype),
+            nn.Residual(
+                nn.Sequential(
+                    ConvBatchNorm(32, 32, 3, 1, device=device, dtype=dtype),
+                    ConvBatchNorm(32, 32, 3, 1, device=device, dtype=dtype),
+                )
+            ),
+            ConvBatchNorm(32, 64, 3, 2, device=device, dtype=dtype),
+            ConvBatchNorm(64, 128, 3, 2, device=device, dtype=dtype),
+            nn.Residual(
+                nn.Sequential(
+                    ConvBatchNorm(128, 128, 3, 1, device=device, dtype=dtype),
+                    ConvBatchNorm(128, 128, 3, 1, device=device, dtype=dtype),
+                )
+            ),
+            nn.Flatten(),
+            nn.Linear(128, 128, device=device, dtype=dtype),
+            nn.ReLU(),
+            nn.Linear(128, 10, device=device, dtype=dtype),
+        )
         ### END YOUR SOLUTION
 
     def forward(self, x):
         # TODO
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return self.net(x)
         ### END YOUR SOLUTION
